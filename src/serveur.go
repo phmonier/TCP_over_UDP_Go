@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"math/rand"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -51,9 +51,19 @@ func main() {
 		}
 
 		//ON REPOND AU CLIENT
-		data := []byte(strconv.Itoa(random(1, 1001))) //on renvoie un entier random sous form de string
+		/*data := []byte(strconv.Itoa(random(1, 1001))) //on renvoie un entier random sous form de string
 		fmt.Printf("data: %s\n", string(data))
+		_, err = connection.WriteToUDP(data, addr)*/
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print(">> ")
+		text, _ := reader.ReadString('\n')
+		data := []byte(text + "\n")
 		_, err = connection.WriteToUDP(data, addr)
+		if strings.TrimSpace(string(data)) == "STOP" {
+			fmt.Println("Exiting UDP serveur!")
+			return
+		}
+
 		if err != nil {
 			fmt.Println(err)
 			return
