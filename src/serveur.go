@@ -1,35 +1,36 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
 	"strings"
-	"time"
+	"strconv"
+	//"time"
 )
 
-// code from linode.com
-
-func random(min, max int) int {
-	return rand.Intn(max-min) + min
-}
 
 func main() {
+	/*---------------------INITIALIZATION------------------ */
+	//On récupère le port
 	arguments := os.Args
-	if len(arguments) == 1 {
-		fmt.Println("Please provide a port number!")
+	if len(arguments) < 2 {
+		fmt.Println("Usage : ./serveur <port>")
+		return
+	}
+	if len(arguments) > 2 {
+		fmt.Println("Usage : ./serveur <port>")
 		return
 	}
 	PORT := ":" + arguments[1]
 
-	s, err := net.ResolveUDPAddr("udp4", PORT) //vérifie que l'adresse et le port sont bien conformes au réseau (ici udp4)
+	//On récupère l'adresse de l'UDP endpoint (endpoint=IP:port)
+	s, err := net.ResolveUDPAddr("udp4", PORT) 
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-
+	//On créé un serveur UDP
 	connection, err := net.ListenUDP("udp4", s)
 	if err != nil {
 		fmt.Println(err)
@@ -37,36 +38,63 @@ func main() {
 	}
 
 	defer connection.Close()
-	buffer := make([]byte, 1024) //on crée et initialise un objet buffer de type []byte et taille 1024
-	rand.Seed(time.Now().Unix())
 
-	for {
-		//ON RECOIT ET AFFICHE LE MESSAGE DU CLIENT
-		n, addr, err := connection.ReadFromUDP(buffer)
-		fmt.Print("-> ", string(buffer[0:n-1]))
+	//On crée et initialise un objet buffer de type []byte et taille 1024
+	buffer := make([]byte, 1024) 
 
-		if strings.TrimSpace(string(buffer[0:n])) == "STOP" {
-			fmt.Println("Exiting UDP server!")
-			return
-		}
+	/*---------------------THREE-WAY HANDSHAKE------------------ */
+	fmt.Println("-------------------------------------")
+	fmt.Println("--------THREE-WAY HANDSHAKE----------")
+	fmt.Println("-------------------------------------")
 
-		//ON REPOND AU CLIENT
-		/*data := []byte(strconv.Itoa(random(1, 1001))) //on renvoie un entier random sous form de string
-		fmt.Printf("data: %s\n", string(data))
-		_, err = connection.WriteToUDP(data, addr)*/
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Print(">> ")
-		text, _ := reader.ReadString('\n')
-		data := []byte(text + "\n")
-		_, err = connection.WriteToUDP(data, addr)
-		if strings.TrimSpace(string(data)) == "STOP" {
-			fmt.Println("Exiting UDP serveur!")
-			return
-		}
+	//On lit le message recu et on le met dans le buffer
+	nbytes, addr, err := connection.ReadFromUDP(buffer)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
+	if strings.TrimSpace(string(buffer[0:nbytes])) == "STOP" {
+		fmt.Println("Exiting UDP server!")
+		return
+	}
+	//Si le message recu est un SYN
+	if strings.Contains(string(buffer), "SYN"){
+		
+		fmt.Print("Received message ", nbytes," bytes: ", string(buffer),"\n")
+		fmt.Println("Sending SYN_ACK...")
+		
+		//On créé un serveur UDP pour les messages avec le nouveau port
+		new_port := 6667
+
+		add, err := net.ResolveUDPAddr("udp4", (":" + strconv.Itoa(new_port))) 
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
+
+		conn, err := net.ListenUDP("udp4", add)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		defer conn.Close()
+
+		//On envoie le SYN-ACK avec le nouveau port
+		_, err = connection.WriteToUDP([]byte("SYN-ACK"+strconv.Itoa(new_port)), addr)
+
+		//On attend un ACK
+		nbytes, _, err := connection.ReadFromUDP(buffer)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if strings.Contains(string(buffer), "ACK"){
+			fmt.Println("Received message ", nbytes," bytes: ", string(buffer))
+			fmt.Println("Three-way handshake established !")
+			fmt.Println("-------------------------------------")
+		}
+
 	}
 }
