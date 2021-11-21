@@ -11,7 +11,10 @@ import (
 
 
 func main() {
-	/*---------------------INITIALIZATION------------------ */
+	/*---------------------------------------------------------- */
+	/*-----------------------INITIALISATION--------------------- */
+	/*---------------------------------------------------------- */
+
 	//On récupère le port
 	arguments := os.Args
 	if len(arguments) < 2 {
@@ -42,7 +45,10 @@ func main() {
 	//On crée et initialise un objet buffer de type []byte et taille 1024
 	buffer := make([]byte, 1024) 
 
+	/*---------------------------------------------------------- */
 	/*---------------------THREE-WAY HANDSHAKE------------------ */
+	/*---------------------------------------------------------- */
+
 	fmt.Println("-------------------------------------")
 	fmt.Println("--------THREE-WAY HANDSHAKE----------")
 	fmt.Println("-------------------------------------")
@@ -81,7 +87,7 @@ func main() {
 
 		defer conn.Close()
 
-		//On envoie le SYN-ACK avec le nouveau port
+		//Le serveur est pret : on envoie le SYN-ACK avec le nouveau port
 		_, err = connection.WriteToUDP([]byte("SYN-ACK"+strconv.Itoa(new_port)), addr)
 
 		//On attend un ACK
@@ -91,10 +97,26 @@ func main() {
 			return
 		}
 		if strings.Contains(string(buffer), "ACK"){
-			fmt.Println("Received message ", nbytes," bytes: ", string(buffer))
+			fmt.Println("Received message", nbytes,"bytes: ", string(buffer))
 			fmt.Println("Three-way handshake established !")
 			fmt.Println("-------------------------------------")
 		}
+		/*---------------------------------------------------------- */
+		/*---------------RECUPERER LE NOM DU FICHIER---------------- */
+		/*---------------------------------------------------------- */
+		n, _, err := conn.ReadFromUDP(buffer)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fileName := string(buffer)
+		fmt.Println("Received message", n,"bytes:", fileName)
+		
+		/*---------------------------------------------------------- */
+		/*--------------------ENVOYER LE FICHIER-------------------- */
+		/*---------------------------------------------------------- */
+
+
 
 	}
 }
