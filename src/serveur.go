@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 	"strconv"
-	//"time"
+	"time"
 )
 
 /*-------------------------------------------------------------- */
@@ -140,7 +140,8 @@ func sendFile( conn *net.UDPConn, fileName string, addr *net.UDPAddr ) {
 			//On envoie le segment au client
 			_, err = conn.WriteToUDP(seg, addr)
 
-			//On attend de recevoir l'ack 
+			//SLOW START
+			time.Sleep(1 * time.Second)
 
 			//On reset nos buffers
 			header = header[:0]
@@ -148,6 +149,8 @@ func sendFile( conn *net.UDPConn, fileName string, addr *net.UDPAddr ) {
 
 		}
 		//Fin de l'envoi : on envoit "FIN" au client
+		_, err = conn.WriteToUDP([]byte("FIN"), addr)
+
 	}
 }
 
