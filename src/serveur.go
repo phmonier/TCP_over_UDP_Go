@@ -16,7 +16,7 @@ import (
 func sendFile( conn *net.UDPConn, fileName string, addr *net.UDPAddr ) {
 
 	//On ouvre notre fichier
-	var file, err = os.Open(fileName)
+	var file, err = os.Open(fileName) //fileName
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -207,7 +207,7 @@ func main() {
 	//Si le message recu est un SYN
 	if strings.Contains(string(buffer), "SYN"){
 		
-		fmt.Print("Received message ", nbytes," bytes: ", string(buffer),"\n")
+		fmt.Print("Received message ", nbytes," bytes: ",string(buffer),"\n")
 		fmt.Println("Sending SYN_ACK...")
 		
 		//On créé un serveur UDP pour les messages avec le nouveau port
@@ -237,7 +237,7 @@ func main() {
 			return
 		}
 		if strings.Contains(string(buffer), "ACK"){
-			fmt.Println("Received message", nbytes,"bytes: ", string(buffer))
+			fmt.Println("Received message", nbytes,"bytes :", string(buffer))
 			fmt.Println("Three-way handshake established !")
 			fmt.Println("-------------------------------------")
 		}
@@ -249,6 +249,9 @@ func main() {
 			fmt.Println(err)
 			return
 		}
+
+		buffer = buffer[:n-1]
+
 		fileName := string(buffer)
 		fmt.Println("Received message", n,"bytes:", fileName)
 		
