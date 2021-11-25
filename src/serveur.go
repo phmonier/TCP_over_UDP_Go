@@ -50,11 +50,10 @@ func sendFile( conn *net.UDPConn, fileName string, addr *net.UDPAddr ) {
 
 		//taille de nos buffers
 		segSize := 0 //taille du segment total (max 1024 octets)
-		headerSize := 0 //segment ID sur 6 octets
-		chunkSize := 1018 //chunk max de données à envoyer
+		chunkSize := 1018 //chunk de données à envoyer
 
 		//création des buffers
-		header := make([]byte, headerSize)
+		var header string
 		seg := make([]byte, segSize)			
 		chunk := make([]byte, chunkSize)
 
@@ -93,49 +92,55 @@ func sendFile( conn *net.UDPConn, fileName string, addr *net.UDPAddr ) {
 			
 			//On décrémente le countdown
 			countdown = countdown - bytesToCopy
+
 			//On choisit un ID à mettre dans le header pour le segment en rajoutant les 0 nécessaires
 			count = count + 1
-			header = append(header, byte(count))
 			if count < 10 {
 				i:=0
 				for (i < 5){
-					header = append([]byte{0}, header...)
+					header = header + "0"
 					i++
 				}
 				//fmt.Println(header)
 			} else if count < 100 {
 				i:=0
 				for (i < 4){
-					header = append([]byte{0}, header...)
+					header = header + "0"
 					i++
 				}
 			} else if count < 1000 {
 				i:=0
 				for (i < 3){
-					header = append([]byte{0}, header...)
+					header = header + "0"
 					i++
 				}
 			} else if count < 10000 {
 				i:=0
 				for (i < 2){
-					header = append([]byte{0}, header...)
+					header = header + "0"
 					i++
 				}
 			} else if count < 100000 {
 				i:=0
 				for (i < 1){
-					header = append([]byte{0}, header...)
+					header = header + "0"
 					i++
 				}
 			}
+
+			header = header + strconv.Itoa(count)
+
 			//On met le header dans le segment à envoyer
 			seg = append(seg, header...)
 
 			//On met le chunk de données dans le segment à envoyer
 			seg = append(seg, chunk...)
+			//fmt.Println(string(seg))
 
-			//On envoie le segment au client et on attend un ACK
+			//On envoie le segment au client
 			_, err = conn.WriteToUDP(seg, addr)
+
+			//On attend de recevoir l'ack 
 
 			//On reset nos buffers
 			header = header[:0]
