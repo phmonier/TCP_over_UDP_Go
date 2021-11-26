@@ -16,7 +16,7 @@ import (
 func sendFile( conn *net.UDPConn, fileName string, addr *net.UDPAddr ) {
 
 	//On ouvre notre fichier
-	var file, err = os.Open(fileName) //fileName
+	var file, err = os.Open(fileName) 
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -140,8 +140,10 @@ func sendFile( conn *net.UDPConn, fileName string, addr *net.UDPAddr ) {
 			//On envoie le segment au client
 			_, err = conn.WriteToUDP(seg, addr)
 
-			//SLOW START
-			time.Sleep(1 * time.Second)
+			//Gestion de pertes de paquets
+			//time.Sleep(1 * time.Second)
+			handle(conn, header, addr, seg)
+			
 
 			//On reset nos buffers
 			header = header[:0]
@@ -150,9 +152,46 @@ func sendFile( conn *net.UDPConn, fileName string, addr *net.UDPAddr ) {
 		}
 		//Fin de l'envoi : on envoit "FIN" au client
 		_, err = conn.WriteToUDP([]byte("FIN"), addr)
-
 	}
 }
+
+func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte){
+	//On créé un buffer vide capable de garder 5 segments windowSeg[]
+	windowSeg := make([]byte, 5120)
+	//On append chaque segment a ce buffer
+	//for timeout>0 :
+	//si ACK reçu pas le bon 
+		//On prend le num de seq de l'ACK reçu (ex: 000001)
+		//On parcours buffSeg
+			//On prend les 6 premiers bytes du seg headerSeg
+			//Si string.Contains(numACK, headerSeg)
+				//On retransmet les paquets a partir de ce segment
+	//Si ACK recu :
+		//On vide buffSeg
+
+	
+	//Tous les 5 paquets, on regarde le dernier ACK recu
+	buffACK := make([]byte, 10) 
+	//conn.SetDeadline(time.Now().Add(time.Duration(timeout) * time.Milliseconds))
+	n, _, err := conn.ReadFromUDP(buffACK)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Message reçu:", string(buffACK), n,"bytes")
+	//Si c'est le numero du header actuel -> continue
+	if strings.Contains(string(buffACK), header){
+		//Tout va bien
+	} else {
+		//Timeout
+
+		//Sinon on prend le numero de l'ACK et on retransmet 
+		//5 paquets a partir de ce numero d'ACK
+		_, err = conn.WriteToUDP(seg, addr)
+	}
+	
+}
+
 
 /*-------------------------------------------------------------- */
 /*-----------------------------MAIN----------------------------- */
