@@ -157,7 +157,7 @@ func sendFile( conn *net.UDPConn, fileName string, addr *net.UDPAddr ) {
 
 func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte){
 	//On créé un buffer vide capable de garder 5 segments windowSeg[]
-	windowSeg := make([]byte, 5120)
+	//windowSeg := make([]byte, 5120)
 	//On append chaque segment a ce buffer
 	//for timeout>0 :
 	//si ACK reçu pas le bon 
@@ -170,7 +170,7 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte){
 		//On vide buffSeg
 
 	
-	//Tous les 5 paquets, on regarde le dernier ACK recu
+	//Pour chaque paquet, on regarde le dernier ACK recu
 	buffACK := make([]byte, 10) 
 	//conn.SetDeadline(time.Now().Add(time.Duration(timeout) * time.Milliseconds))
 	n, _, err := conn.ReadFromUDP(buffACK)
@@ -183,8 +183,6 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte){
 	if strings.Contains(string(buffACK), header){
 		//Tout va bien
 	} else {
-		//Timeout
-
 		//Sinon on prend le numero de l'ACK et on retransmet 
 		//5 paquets a partir de ce numero d'ACK
 		_, err = conn.WriteToUDP(seg, addr)
