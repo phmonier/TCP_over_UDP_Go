@@ -22,7 +22,7 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 		return
 	}
 
-	defer file.Close()
+	//defer file.Close()
 
 	//Si le fichier n'est pas vide
 	if file != nil {
@@ -214,44 +214,9 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
 
 }
 
-/*-------------------------------------------------------------- */
-/*-----------------------------MAIN----------------------------- */
-/*-------------------------------------------------------------- */
+//La fonction add-conn fait le tree-way handshake et attribue puis retourne le numéro de port pour l'envoie du fichier au client
 
-func main() {
-	/*---------------------------------------------------------- */
-	/*-----------------------INITIALISATION--------------------- */
-	/*---------------------------------------------------------- */
-
-	//On récupère le port
-	arguments := os.Args
-	if len(arguments) < 2 {
-		fmt.Println("Usage : ./serveur <port>")
-		return
-	}
-	if len(arguments) > 2 {
-		fmt.Println("Usage : ./serveur <port>")
-		return
-	}
-	PORT := ":" + arguments[1]
-
-	//On récupère l'adresse de l'UDP endpoint (endpoint=IP:port)
-	s, err := net.ResolveUDPAddr("udp4", PORT)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	//On créé un serveur UDP
-	connection, err := net.ListenUDP("udp4", s)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	defer connection.Close()
-
-	//On crée et initialise un objet buffer de type []byte et taille 1024
-	buffer := make([]byte, 1024)
+func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPConn) {
 
 	/*---------------------------------------------------------- */
 	/*---------------------THREE-WAY HANDSHAKE------------------ */
@@ -260,13 +225,6 @@ func main() {
 	fmt.Println("-------------------------------------")
 	fmt.Println("--------THREE-WAY HANDSHAKE----------")
 	fmt.Println("-------------------------------------")
-
-	//On lit le message recu et on le met dans le buffer
-	nbytes, addr, err := connection.ReadFromUDP(buffer)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
 
 	if strings.TrimSpace(string(buffer[0:nbytes])) == "STOP" {
 		fmt.Println("Exiting UDP server!")
@@ -327,7 +285,71 @@ func main() {
 		/*--------------------ENVOYER LE FICHIER-------------------- */
 		/*---------------------------------------------------------- */
 		sendFile(conn, fileName, addr)
+	}
 
+}
+
+/*-------------------------------------------------------------- */
+/*-----------------------------MAIN----------------------------- */
+/*-------------------------------------------------------------- */
+
+func main() {
+	/*---------------------------------------------------------- */
+	/*-----------------------INITIALISATION--------------------- */
+	/*---------------------------------------------------------- */
+
+	//On récupère le port
+	arguments := os.Args
+	if len(arguments) < 2 {
+		fmt.Println("Usage : ./serveur <port>")
+		return
+	}
+	if len(arguments) > 2 {
+		fmt.Println("Usage : ./serveur <port>")
+		return
+	}
+	PORT := ":" + arguments[1]
+
+	//On récupère l'adresse de l'UDP endpoint (endpoint=IP:port)
+	s, err := net.ResolveUDPAddr("udp4", PORT)
+	fmt.Println("ResolveUDPAddr :", s)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	//On créé un serveur UDP
+	connection, err := net.ListenUDP("udp4", s)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer connection.Close()
+
+	//On crée et initialise un objet buffer de type []byte et taille 1024
+	buffer := make([]byte, 1024)
+
+	//Création d'une map de connection ouverte
+	current_conn := make(map[*net.UDPAddr]bool)
+
+	for {
+		fmt.Println("current_conn : ", current_conn)
+
+		//On lit le message recu et on le met dans le buffer
+		nbytes, addr, err := connection.ReadFromUDP(buffer)
+		fmt.Println("adresse addr", addr)
+
+		if err != nil {
+			fmt.Println(err)
+			return
+
+		} else if _, found := current_conn[addr]; !found {
+			/* si l'adresse de connexion n'est pas dans la map :
+			- on ajoute l'adresse à la map
+			- on lance la connexion avec la fonction add_conn */
+			current_conn[addr] = true
+			add_conn(addr, buffer, nbytes, connection)
+			// ici on lancera la goroutine avec l'envoie du fichier
+		}
 	}
 
 }
