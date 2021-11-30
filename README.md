@@ -18,12 +18,12 @@ This repository contains the folder :
 - *pres*/ -- will contain the presentation of our project, in pdf
 
 ### Usage
-To compile the .exe server files you'll have to type in a terminal :
+To run the .exe server files you'll have to type in a terminal :
 ```
 ./serveurX-LesTryhardeusesDuDimanche <port number>
 //X = <scenario number>
 ```
-To compile the .exe clients files you'll have to type in another terminal :
+To run the .exe clients files you'll have to type in another terminal :
 ```
 ./clientX <IP server> <port number server> <file name>
 //X = <client number>
@@ -31,7 +31,13 @@ To compile the .exe clients files you'll have to type in another terminal :
 
 To compile serveur.go you'll have to type in a terminal :
 ```
-go build serveur.go
+make
 ./serveur <port number>
 ```
 
+To compile again serveur.go you'll have to type in a terminal :
+```
+make clean
+make
+./serveur <port number>
+```
