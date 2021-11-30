@@ -256,7 +256,7 @@ func file(new_port int, addr *net.UDPAddr) {
 //La fonction add-conn fait le tree-way handshake et attribue puis retourne le numéro de port pour l'envoie du fichier au client
 //la fonction retourne le pointeur vers la connexion udp établie "conn"
 
-func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPConn) int {
+func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPConn, new_port int) int {
 
 	/*---------------------------------------------------------- */
 	/*---------------------THREE-WAY HANDSHAKE------------------ */
@@ -275,9 +275,6 @@ func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPC
 
 		fmt.Print("Received message ", nbytes, " bytes: ", string(buffer), "\n")
 		fmt.Println("Sending SYN_ACK...")
-
-		//On créé un serveur UDP pour les messages avec le nouveau port
-		new_port := 6667
 
 		//Le serveur est pret : on envoie le SYN-ACK avec le nouveau port
 		_, _ = connection.WriteToUDP([]byte("SYN-ACK"+strconv.Itoa(new_port)), addr)
@@ -339,9 +336,10 @@ func main() {
 
 	//On crée et initialise un objet buffer de type []byte et taille 1024
 	buffer := make([]byte, 1024)
+	new_port := 1024 //on commence à 1024 et pas 1000 car les 1024 sont limité pour les utilisateurs normaux (non root par exemple)
 
-	//Création d'une map de connection ouverte
-	current_conn := make(map[*net.UDPAddr]bool)
+	//Création d'une map de connection ouverte : clé = @ip:port_init ; valeur = new_port
+	current_conn := make(map[*net.UDPAddr]int)
 
 	for {
 		fmt.Println("current_conn : ", current_conn)
@@ -358,8 +356,15 @@ func main() {
 			/* si l'adresse de connexion n'est pas dans la map :
 			- on ajoute l'adresse à la map
 			- on lance la connexion avec la fonction add_conn */
-			current_conn[addr] = true
-			new_udp_port := add_conn(addr, buffer, nbytes, connection)
+
+			current_conn[addr] = new_port //clé: addr ; valeur = current_conn[addr]
+
+			new_port += 1 //on incrémente le new_port de 1 pour la prochaine connexion
+
+			if new_port == 9999 { //si on arrive à la fin de la plage de port, on reboucle au début de cette plage
+				new_port = 1024
+			}
+			new_udp_port := add_conn(addr, buffer, nbytes, connection, current_conn[addr])
 			// on lancera la goroutine avec l'envoie du fichier
 			go file(new_udp_port, addr)
 		}
