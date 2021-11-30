@@ -22,7 +22,7 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 		return
 	}
 
-	//defer file.Close()
+	defer file.Close()
 
 	//Si le fichier n'est pas vide
 	if file != nil {
@@ -214,9 +214,49 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
 
 }
 
-//La fonction add-conn fait le tree-way handshake et attribue puis retourne le numéro de port pour l'envoie du fichier au client
+/*------------------------------------------------------------------------------------------*/
+// La goroutine file gèrer les échanges client-serveur en lien avec le fichier en parallèle
 
-func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPConn) {
+func file(new_port int, addr *net.UDPAddr) {
+
+	/*------OUVERTURE DE LA CONNEXION SUR LE NOUVEAU PORT------ */
+	buffer := make([]byte, 1024)
+
+	add, err := net.ResolveUDPAddr("udp4", (":" + strconv.Itoa(new_port)))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	conn, err := net.ListenUDP("udp4", add)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	defer conn.Close()
+
+	/*---------------RECUPERER LE NOM DU FICHIER---------------- */
+	n, _, err := conn.ReadFromUDP(buffer)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	buffer = buffer[:n-1]
+
+	fileName := string(buffer)
+	fmt.Println("Received message", n, "bytes:", fileName)
+
+	/*--------------------ENVOYER LE FICHIER-------------------- */
+	sendFile(conn, fileName, addr)
+}
+
+//La fonction add-conn fait le tree-way handshake et attribue puis retourne le numéro de port pour l'envoie du fichier au client
+//la fonction retourne le pointeur vers la connexion udp établie "conn"
+
+func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPConn) int {
 
 	/*---------------------------------------------------------- */
 	/*---------------------THREE-WAY HANDSHAKE------------------ */
@@ -228,7 +268,7 @@ func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPC
 
 	if strings.TrimSpace(string(buffer[0:nbytes])) == "STOP" {
 		fmt.Println("Exiting UDP server!")
-		return
+		return -1
 	}
 	//Si le message recu est un SYN
 	if strings.Contains(string(buffer), "SYN") {
@@ -239,53 +279,25 @@ func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPC
 		//On créé un serveur UDP pour les messages avec le nouveau port
 		new_port := 6667
 
-		add, err := net.ResolveUDPAddr("udp4", (":" + strconv.Itoa(new_port)))
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		conn, err := net.ListenUDP("udp4", add)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		defer conn.Close()
-
 		//Le serveur est pret : on envoie le SYN-ACK avec le nouveau port
-		_, err = connection.WriteToUDP([]byte("SYN-ACK"+strconv.Itoa(new_port)), addr)
+		_, _ = connection.WriteToUDP([]byte("SYN-ACK"+strconv.Itoa(new_port)), addr)
 
 		//On attend un ACK
 		nbytes, _, err := connection.ReadFromUDP(buffer)
 		if err != nil {
 			fmt.Println(err)
-			return
+			return -1
 		}
+
 		if strings.Contains(string(buffer), "ACK") {
 			fmt.Println("Received message", nbytes, "bytes :", string(buffer))
 			fmt.Println("Three-way handshake established !")
 			fmt.Println("-------------------------------------")
-		}
-		/*---------------------------------------------------------- */
-		/*---------------RECUPERER LE NOM DU FICHIER---------------- */
-		/*---------------------------------------------------------- */
-		n, _, err := conn.ReadFromUDP(buffer)
-		if err != nil {
-			fmt.Println(err)
-			return
+			return new_port
 		}
 
-		buffer = buffer[:n-1]
-
-		fileName := string(buffer)
-		fmt.Println("Received message", n, "bytes:", fileName)
-
-		/*---------------------------------------------------------- */
-		/*--------------------ENVOYER LE FICHIER-------------------- */
-		/*---------------------------------------------------------- */
-		sendFile(conn, fileName, addr)
 	}
+	return -1
 
 }
 
@@ -347,8 +359,9 @@ func main() {
 			- on ajoute l'adresse à la map
 			- on lance la connexion avec la fonction add_conn */
 			current_conn[addr] = true
-			add_conn(addr, buffer, nbytes, connection)
-			// ici on lancera la goroutine avec l'envoie du fichier
+			new_udp_port := add_conn(addr, buffer, nbytes, connection)
+			// on lancera la goroutine avec l'envoie du fichier
+			go file(new_udp_port, addr)
 		}
 	}
 
