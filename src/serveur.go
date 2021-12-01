@@ -180,7 +180,7 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
 	if err != nil {
 		if err, ok := err.(net.Error); ok && err.Timeout() {
 			//si on arrive là, c'est qu'on a pas reçu le premier ACK donc on retransmet la fenetre
-			fmt.Println("Retransmission du paquet perdu")
+			fmt.Println("Packet lost -> retransmition")
 			_, _ = conn.WriteToUDP(seg, addr)
 
 			//on vide le buffer
@@ -195,7 +195,7 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
 	}
 
 	if buffACK != nil {
-		fmt.Println("Message reçu:", string(buffACK), n, "bytes")
+		fmt.Println("Received message :", string(buffACK), n, "bytes")
 		//Si c'est le numero du header actuel -> continue
 		if strings.Contains(string(buffACK), header) {
 			//Tout va bien
@@ -214,9 +214,7 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
 
 }
 
-/*------------------------------------------------------------------------------------------*/
-// La goroutine file gèrer les échanges client-serveur en lien avec le fichier en parallèle
-
+// La goroutine file gère les échanges client-serveur en lien avec le fichier en parallèle
 func file(new_port int, addr *net.UDPAddr) {
 
 	/*------OUVERTURE DE LA CONNEXION SUR LE NOUVEAU PORT------ */
@@ -253,9 +251,8 @@ func file(new_port int, addr *net.UDPAddr) {
 	sendFile(conn, fileName, addr)
 }
 
-//La fonction add-conn fait le tree-way handshake et attribue puis retourne le numéro de port pour l'envoie du fichier au client
+//La fonction add_conn fait le three-way handshake et attribue puis retourne le numéro de port pour l'envoi du fichier au client
 //la fonction retourne le pointeur vers la connexion udp établie "conn"
-
 func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPConn, new_port int) int {
 
 	/*---------------------------------------------------------- */
@@ -266,10 +263,6 @@ func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPC
 	fmt.Println("--------THREE-WAY HANDSHAKE----------")
 	fmt.Println("-------------------------------------")
 
-	if strings.TrimSpace(string(buffer[0:nbytes])) == "STOP" {
-		fmt.Println("Exiting UDP server!")
-		return -1
-	}
 	//Si le message recu est un SYN
 	if strings.Contains(string(buffer), "SYN") {
 
@@ -336,9 +329,9 @@ func main() {
 
 	//On crée et initialise un objet buffer de type []byte et taille 1024
 	buffer := make([]byte, 1024)
-	new_port := 1024 //on commence à 1024 et pas 1000 car les 1024 sont limité pour les utilisateurs normaux (non root par exemple)
+	new_port := 1024 //on commence à 1024 et pas 1000 car les 1024 sont limités pour les utilisateurs normaux (non root par exemple)
 
-	//Création d'une map de connection ouverte : clé = @ip:port_init ; valeur = new_port
+	//Création d'une map de connections ouvertes : clé = @ip:port_init ; valeur = new_port
 	current_conn := make(map[*net.UDPAddr]int)
 
 	for {
@@ -347,7 +340,6 @@ func main() {
 		//On lit le message recu et on le met dans le buffer
 		nbytes, addr, err := connection.ReadFromUDP(buffer)
 		fmt.Println("adresse addr", addr)
-
 		if err != nil {
 			fmt.Println(err)
 			return
