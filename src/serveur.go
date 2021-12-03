@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+
 /*-------------------------------------------------------------- */
 /*--------------------------FONCTIONS--------------------------- */
 /*-------------------------------------------------------------- */
@@ -170,7 +171,7 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
 	//Pour chaque paquet, on regarde le dernier ACK recu
 	buffACK := make([]byte, 10)
 
-	timeout, _ := time.ParseDuration("20ms")
+	timeout, _ := time.ParseDuration("100ms")
 	conn.SetReadDeadline(time.Now().Add(timeout))
 
 	n, _, err := conn.ReadFromUDP(buffACK)
@@ -207,6 +208,7 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
 			//5 paquets a partir de ce numero d'ACK
 			_, err = conn.WriteToUDP(seg, addr)
 			buffACK = buffACK[:0]
+			handle(conn, header, addr, seg)
 			return
 
 		}
@@ -216,7 +218,6 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
 
 // La goroutine file gère les échanges client-serveur en lien avec le fichier en parallèle
 func file(new_port int, addr *net.UDPAddr) {
-
 	/*------OUVERTURE DE LA CONNEXION SUR LE NOUVEAU PORT------ */
 	buffer := make([]byte, 1024)
 
@@ -357,8 +358,10 @@ func main() {
 				new_port = 1024
 			}
 			new_udp_port := add_conn(addr, buffer, nbytes, connection, current_conn[addr])
-			// on lancera la goroutine avec l'envoie du fichier
+			// on lancera la goroutine avec l'envoi du fichier
 			go file(new_udp_port, addr)
+
+			
 		}
 	}
 
