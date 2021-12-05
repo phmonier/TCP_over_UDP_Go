@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-
 /*-------------------------------------------------------------- */
 /*--------------------------FONCTIONS--------------------------- */
 /*-------------------------------------------------------------- */
@@ -219,17 +218,18 @@ func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
 // La goroutine file gère les échanges client-serveur en lien avec le fichier en parallèle
 func file(new_port int, addr *net.UDPAddr) {
 	/*------OUVERTURE DE LA CONNEXION SUR LE NOUVEAU PORT------ */
+	fmt.Println("New connexion for addr", addr, "on port ", new_port)
 	buffer := make([]byte, 1024)
 
 	add, err := net.ResolveUDPAddr("udp4", (":" + strconv.Itoa(new_port)))
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("ResolveUDPAddr: ", err)
 		return
 	}
 
 	conn, err := net.ListenUDP("udp4", add)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("ListenUDP: ", err)
 		return
 	}
 
@@ -361,7 +361,6 @@ func main() {
 			// on lancera la goroutine avec l'envoi du fichier
 			go file(new_udp_port, addr)
 
-			
 		}
 	}
 
