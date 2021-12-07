@@ -106,7 +106,7 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 				next_seq = next_biggest_ack
 			}
 			//On retourne true si le # de paquet courant inf à la taille de la fenetre + (dernier plus grand ack + 1)
-			if next_seq < next_biggest_ack + winSize && (next_biggest_ack==1 || next_biggest_ack % 3 ==0){
+			if next_seq < next_biggest_ack + winSize && (next_biggest_ack==1 || next_biggest_ack % winSize+1 ==0){
 				return true
 			} else {
 				return false
