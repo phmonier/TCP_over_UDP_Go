@@ -16,9 +16,9 @@ import (
 func progression(next_biggest_ack *int, seq_max int) {
 	//affiche le pourcentage d'avancement toutes les 100ms
 	seq_max_float := float64(seq_max)
-	for *next_biggest_ack < seq_max {
+	for *next_biggest_ack-1 < seq_max {
 		time.Sleep(time.Millisecond * 100)
-		fmt.Printf("\r [%2.0f%%] Waiting for ack #%d\n", 100*float64(*next_biggest_ack)/seq_max_float, *next_biggest_ack)
+		fmt.Printf("\r [%2.0f%%] Waiting for ack #%d\n", 100*float64(*next_biggest_ack-1)/seq_max_float, *next_biggest_ack)
 	}
 }
 
@@ -72,7 +72,7 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 		}
 
 		//création de nos variables
-		timeouts := make([]time.Time, len(packets)+2)
+		timeouts := make([]time.Time, len(packets)+2) //+2 sinon index out of range
 		buf := make([]byte, 32)
 		next_seq := 1
 		last_ack := 0
@@ -87,11 +87,11 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 				//Si c'est le dernier paquet : on envoie que la partie remplie du paquet
 				if num_seq == seq_max {
 					n := (int)(fi.Size()) - (int)((seq_max-1)*chunkSize)
-					//fmt.Println("Sending packet number", num_seq-1)
+					fmt.Println("Sending last packet number", num_seq)
 					_, err = conn.WriteToUDP(packets[num_seq-1][0:n], addr)
 				} else {
 					//Sinon on envoie le paquet
-					//fmt.Println("Sending packet number", num_seq-1)
+					fmt.Println("Sending packet number", num_seq)
 					_, err = conn.WriteToUDP(packets[num_seq-1], addr)
 				}
 				//On set le timeout pour ce paquet
@@ -124,6 +124,7 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 					send(next_seq)
 					//On passe au prochain paquet
 					next_seq++
+					//fmt.Println("next-seq:",next_seq)
 				} else {
 				//Sinon, si le temps de timeout du dernier + grand ack + 1 est supérieur à 900ms
 					if time.Since(timeouts[next_biggest_ack])> time.Millisecond * 900 {
@@ -136,25 +137,29 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 
 		}()
 		//on affiche la progression en pourcentages de notre envoi
-		go progression(&next_biggest_ack, seq_max)
-		
+		//go progression(&next_biggest_ack, seq_max)
+
 		//tant que le plus grand ack +1  inf au # du dernier paquet,
-		for next_biggest_ack < seq_max {
+		for next_biggest_ack <= seq_max {
 			//On lit l'ack recu
 			_, _, err := conn.ReadFromUDP(buf)
+			fmt.Println(string(buf))
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
 			//on récupère le numéro de séquence
 			ack := getSeq(string(buf[3:9]))
+			//fmt.Println("ack:", ack)
+
 
 			//Si c'est le meme ack qu'avant -> on incrémente same_ack
 			if ack == last_ack {
 				same_ack ++
 				//A partir d'un certain nombre d'ack identiques recus, on renvoie le paquet perdu
-				if same_ack > 3 {
+				if same_ack > 0 {
 					send(ack + 1)
+					same_ack = 0
 				}
 			}
 			//si l'ack est plus grand ou = à celui d'avant, il devient last_ack
@@ -166,15 +171,14 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 			if last_ack > next_biggest_ack {
 				next_biggest_ack = last_ack + 1
 			}
-			//
-			if window() {
-				send(next_seq)
-				next_seq++
+			
+			//Fin de l'envoi : on envoie "FIN" au client
+			if last_ack == seq_max {
+				fmt.Println("End of transfer")
+				_, err = conn.WriteToUDP([]byte("FIN"), addr)
 			}
 		}
-		//Fin de l'envoi : on envoie "FIN" au client
-		fmt.Println("End of transfer")
-		_, err = conn.WriteToUDP([]byte("FIN"), addr)
+		
 	}
 }
 
