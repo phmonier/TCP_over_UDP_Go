@@ -68,5 +68,4 @@ implantation ;
 — il faut justifier les valeurs que vous avez choisies pour les différents paramètres
 utilisés par vos serveurs dans le contrôle de congestion ;
 — des petites courbes d’évaluation de performances seront appréciées ;
-— ne faites pas une lecture de votre code, mais expliquez les problèmes rencontrés et
-les solutions trouvées 
+— ne faites pas une lecture de votre code, mais expliquez les problèmes rencontré

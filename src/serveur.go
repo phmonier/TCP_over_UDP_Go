@@ -13,6 +13,20 @@ import (
 /*--------------------------FONCTIONS--------------------------- */
 /*-------------------------------------------------------------- */
 
+func progression(next_biggest_ack *int, seq_max int) {
+	//affiche le pourcentage d'avancement toutes les 100ms
+	seq_max_float := float64(seq_max)
+	for *next_biggest_ack < seq_max {
+		time.Sleep(time.Millisecond * 100)
+		fmt.Printf("\r [%2.0f%%] Waiting for ack #%d\n", 100*float64(*next_biggest_ack)/seq_max_float, *next_biggest_ack)
+	}
+}
+
+func getSeq(ack string) (seq int) {
+	fmt.Sscanf(ack, "%06d", &seq)
+	return seq
+}
+
 func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 
 	//On ouvre notre fichier
@@ -32,187 +46,138 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 			fmt.Println(err)
 			return
 		}
-		bufferSize := fi.Size()
 		fmt.Println("The file is", fi.Size(), "bytes long")
 
-		//On créé un buffer pour mettre le contenu du fichier dedans
-		bufferSlice := make([]byte, bufferSize)
+		nbseg := fi.Size()/1018
+		if (nbseg*1018 < fi.Size()){
+			nbseg = nbseg +1
+		}
+		fmt.Println(nbseg, "packet(s) to send")
 
-		//On lit le fichier dans notre buffer
-		nbytes, err := file.Read(bufferSlice)
-		if err != nil {
-			fmt.Println(err)
-			return
+		//chunk de données à envoyer
+		chunkSize := 1018 
+
+		//création d'un buffer
+		packets := make([][]byte, nbseg)
+
+		//On créé nos différents paquets dans une map
+		for i:= 0; i<len(packets); i++ {
+			packets[i]=make([]byte, chunkSize)
+			
+			//on ajoute le header en rajoutant les 0 nécessaires
+			copy(packets[i][0:6], fmt.Sprintf("%06d", i+1))
+
+			//on ajoute le chunk de données
+			_, _ = file.Read(packets[i][6:])
 		}
 
-		/*On va diviser le buffer en différents segments :*/
+		//création de nos variables
+		timeouts := make([]time.Time, len(packets)+2)
+		buf := make([]byte, 32)
+		next_seq := 1
+		last_ack := 0
+		same_ack := 0
+		next_biggest_ack := last_ack+1 //<=> dernier plus grand ack recu + 1
+		winSize := 3
+		seq_max := len(packets)
 
-		//taille de nos buffers
-		segSize := 0      //taille du segment total (max 1024 octets)
-		chunkSize := 1018 //chunk de données à envoyer
-
-		//création des buffers
-		var header string
-		seg := make([]byte, segSize)
-		chunk := make([]byte, chunkSize)
-
-		//création d'un compteur pour compter nos paquets
-		count := 0
-
-		//création d'un décompte du nombre de bytes à envoyer
-		countdown := nbytes
-
-		//Début de la fragmentation :
-		bytesToCopy := 0
-
-		//tant que le fichier n'est pas vide
-		for countdown > 0 {
-			//On choisit la quantité de données à envoyer
-			if countdown > chunkSize {
-				bytesToCopy = chunkSize
-			} else {
-				bytesToCopy = countdown
+		send := func(num_seq int){
+			//Si le numéro de séquence courant est inf ou = au numéro de séquence max
+			if num_seq <= seq_max {
+				//Si c'est le dernier paquet : on envoie que la partie remplie du paquet
+				if num_seq == seq_max {
+					n := (int)(fi.Size()) - (int)((seq_max-1)*chunkSize)
+					//fmt.Println("Sending packet number", num_seq-1)
+					_, err = conn.WriteToUDP(packets[num_seq-1][0:n], addr)
+				} else {
+					//Sinon on envoie le paquet
+					//fmt.Println("Sending packet number", num_seq-1)
+					_, err = conn.WriteToUDP(packets[num_seq-1], addr)
+				}
+				//On set le timeout pour ce paquet
+				timeouts[num_seq-1] = time.Now()
 			}
-			//fmt.Println("---------------------------------------------------")
-
-			//On copie les données dans le chunk
-			copy(chunk, bufferSlice[:bytesToCopy])
-
-			//Si on a moins de bytes à copier que la taille du chunk, on réduit la taille du chunk
-			if bytesToCopy < chunkSize {
-				chunk = chunk[:bytesToCopy]
-			}
-			//fmt.Println("chunk :", string(chunk))
-			//fmt.Println("---------------------------------------------------")
-
-			//On supprime le chunk du buffer
-			bufferSlice = bufferSlice[bytesToCopy:]
-			//fmt.Println("buffer:" , string(bufferSlice))
-
-			//On décrémente le countdown
-			countdown = countdown - bytesToCopy
-
-			//On choisit un ID à mettre dans le header pour le segment en rajoutant les 0 nécessaires
-			count = count + 1
-			if count < 10 {
-				i := 0
-				for i < 5 {
-					header = header + "0"
-					i++
-				}
-				//fmt.Println(header)
-			} else if count < 100 {
-				i := 0
-				for i < 4 {
-					header = header + "0"
-					i++
-				}
-			} else if count < 1000 {
-				i := 0
-				for i < 3 {
-					header = header + "0"
-					i++
-				}
-			} else if count < 10000 {
-				i := 0
-				for i < 2 {
-					header = header + "0"
-					i++
-				}
-			} else if count < 100000 {
-				i := 0
-				for i < 1 {
-					header = header + "0"
-					i++
-				}
-			}
-
-			header = header + strconv.Itoa(count)
-
-			//On met le header dans le segment à envoyer
-			seg = append(seg, header...)
-
-			//On met le chunk de données dans le segment à envoyer
-			seg = append(seg, chunk...)
-			//fmt.Println(string(seg))
-
-			//On envoie le segment au client
-			_, err = conn.WriteToUDP(seg, addr)
-
-			//Gestion de pertes de paquets
-			//time.Sleep(1 * time.Second)
-			handle(conn, header, addr, seg)
-
-			//On reset nos buffers
-			header = header[:0]
-			seg = seg[:0]
-
 		}
-		//Fin de l'envoi : on envoit "FIN" au client
+
+		window := func() bool {
+			//Si c'est le dernier paquet -> false
+			if next_seq == seq_max {
+				return false
+			}
+			//Si le # du paquet courant est inf au dernier plus grand ack + 1
+			if next_seq < next_biggest_ack {
+				next_seq = next_biggest_ack
+			}
+			//On retourne true si le # de paquet courant inf à la taille de la fenetre + (dernier plus grand ack + 1)
+			return next_seq < next_biggest_ack + winSize
+		}
+
+		go func() {
+			//tant que le dernier plus grand ack + 1 inf au # du dernier paquet
+			for next_biggest_ack < seq_max {
+				//On attend 1ms
+				time.Sleep(time.Millisecond * 1)
+				
+				//Si notre paquet est OK
+				if window() {
+					//On l'envoie
+					send(next_seq)
+					//On passe au prochain paquet
+					next_seq++
+				} else {
+				//Sinon, si le temps de timeout du dernier + grand ack + 1 est supérieur à 900ms
+					if time.Since(timeouts[next_biggest_ack])> time.Millisecond * 900 {
+						//Timeout -> On retransmet le paquet perdu
+						send(next_biggest_ack)
+						fmt.Println("Timeout, retransmitting packet number", next_biggest_ack)
+					}
+				}
+			}
+
+		}()
+		//on affiche la progression en pourcentages de notre envoi
+		go progression(&next_biggest_ack, seq_max)
+		
+		//tant que le plus grand ack +1  inf au # du dernier paquet,
+		for next_biggest_ack < seq_max {
+			//On lit l'ack recu
+			_, _, err := conn.ReadFromUDP(buf)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			//on récupère le numéro de séquence
+			ack := getSeq(string(buf[3:9]))
+
+			//Si c'est le meme ack qu'avant -> on incrémente same_ack
+			if ack == last_ack {
+				same_ack ++
+				//A partir d'un certain nombre d'ack identiques recus, on renvoie le paquet perdu
+				if same_ack > 3 {
+					send(ack + 1)
+				}
+			}
+			//si l'ack est plus grand ou = à celui d'avant, il devient last_ack
+			if ack >= last_ack {
+				last_ack = ack 
+			}
+
+			//Si l'ack est plus grand que le dernier plus grand ack recu +1, on met à jour ce dernier
+			if last_ack > next_biggest_ack {
+				next_biggest_ack = last_ack + 1
+			}
+			//
+			if window() {
+				send(next_seq)
+				next_seq++
+			}
+		}
+		//Fin de l'envoi : on envoie "FIN" au client
+		fmt.Println("End of transfer")
 		_, err = conn.WriteToUDP([]byte("FIN"), addr)
 	}
 }
 
-func handle(conn *net.UDPConn, header string, addr *net.UDPAddr, seg []byte) {
-	//On créé un buffer vide capable de garder 5 segments windowSeg[]
-	//windowSeg := make([]byte, 5120)
-	//On append chaque segment a ce buffer
-	//for timeout>0 :
-	//si ACK reçu pas le bon
-	//On prend le num de seq de l'ACK reçu (ex: 000001)
-	//On parcours buffSeg
-	//On prend les 6 premiers bytes du seg headerSeg
-	//Si string.Contains(numACK, headerSeg)
-	//On retransmet les paquets a partir de ce segment
-	//Si ACK recu :
-	//On vide buffSeg
-
-	//Pour chaque paquet, on regarde le dernier ACK recu
-	buffACK := make([]byte, 10)
-
-	timeout, _ := time.ParseDuration("20ms")
-	conn.SetReadDeadline(time.Now().Add(timeout))
-
-	n, _, err := conn.ReadFromUDP(buffACK)
-	//fmt.Println("contenu buffer", string(buffACK))
-
-	//GESTION DES ERREURS (timeout ou autre erreur)
-	if err != nil {
-		if err, ok := err.(net.Error); ok && err.Timeout() {
-			//si on arrive là, c'est qu'on a pas reçu le premier ACK donc on retransmet la fenetre
-			fmt.Println("Packet lost -> retransmition")
-			_, _ = conn.WriteToUDP(seg, addr)
-
-			//on vide le buffer
-			buffACK = buffACK[:0]
-			handle(conn, header, addr, seg)
-
-		} else {
-			fmt.Println(err)
-		}
-		return
-
-	}
-
-	if buffACK != nil {
-		fmt.Println("Received message :", string(buffACK), n, "bytes")
-		//Si c'est le numero du header actuel -> continue
-		if strings.Contains(string(buffACK), header) {
-			//Tout va bien
-			buffACK = buffACK[:0]
-			return
-
-		} else {
-			//Sinon on prend le numero de l'ACK et on retransmet
-			//5 paquets a partir de ce numero d'ACK
-			_, err = conn.WriteToUDP(seg, addr)
-			buffACK = buffACK[:0]
-			return
-
-		}
-	}
-
-}
 
 // La goroutine file gère les échanges client-serveur en lien avec le fichier en parallèle
 func file(new_port int, addr *net.UDPAddr) {
@@ -283,6 +248,7 @@ func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPC
 			fmt.Println("Received message", nbytes, "bytes :", string(buffer))
 			fmt.Println("Three-way handshake established !")
 			fmt.Println("-------------------------------------")
+			go file(new_port, addr)
 			return new_port
 		}
 
@@ -314,7 +280,7 @@ func main() {
 
 	//On récupère l'adresse de l'UDP endpoint (endpoint=IP:port)
 	s, err := net.ResolveUDPAddr("udp4", PORT)
-	fmt.Println("ResolveUDPAddr :", s)
+	//fmt.Println("ResolveUDPAddr :", s)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -335,11 +301,8 @@ func main() {
 	current_conn := make(map[*net.UDPAddr]int)
 
 	for {
-		fmt.Println("current_conn : ", current_conn)
-
 		//On lit le message recu et on le met dans le buffer
 		nbytes, addr, err := connection.ReadFromUDP(buffer)
-		fmt.Println("adresse addr", addr)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -356,10 +319,9 @@ func main() {
 			if new_port == 9999 { //si on arrive à la fin de la plage de port, on reboucle au début de cette plage
 				new_port = 1024
 			}
-			new_udp_port := add_conn(addr, buffer, nbytes, connection, current_conn[addr])
-			// on lancera la goroutine avec l'envoie du fichier
-			go file(new_udp_port, addr)
+			_ = add_conn(addr, buffer, nbytes, connection, current_conn[addr])
+			// on lancera la goroutine avec l'envoi du fichier
+			//go file(new_udp_port, addr)
 		}
 	}
-
 }
