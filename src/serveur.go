@@ -252,7 +252,6 @@ func add_conn(addr *net.UDPAddr, buffer []byte, nbytes int, connection *net.UDPC
 			fmt.Println("Received message", nbytes, "bytes :", string(buffer))
 			fmt.Println("Three-way handshake established !")
 			fmt.Println("-------------------------------------")
-			go file(new_port, addr)
 			return new_port
 		}
 
@@ -323,9 +322,9 @@ func main() {
 			if new_port == 9999 { //si on arrive à la fin de la plage de port, on reboucle au début de cette plage
 				new_port = 1024
 			}
-			_ = add_conn(addr, buffer, nbytes, connection, current_conn[addr])
+			new_udp_port := add_conn(addr, buffer, nbytes, connection, current_conn[addr])
 			// on lancera la goroutine avec l'envoi du fichier
-			//go file(new_udp_port, addr)
+			go file(new_udp_port, addr)
 		}
 	}
 }
