@@ -77,6 +77,10 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 		next_seq := 1
 		last_ack := 0
 		same_ack := 0
+		lost_ack := false
+		borneInfSlide := false
+		borneInf := 0
+		borneSup := 0
 		next_biggest_ack := last_ack+1 //<=> dernier plus grand ack recu + 1
 		winSize := 3
 		seq_max := len(packets)
@@ -101,21 +105,69 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 		}
 
 		window := func() bool {
-			//Si le # du paquet courant est inf au dernier plus grand ack + 1
+			//Si le # du prochain paquet est inférieur au dernier plus grand ack + 1
 			if next_seq < next_biggest_ack {
 				next_seq = next_biggest_ack
 			}
-			//On retourne true si le # de paquet courant inf à la taille de la fenetre + (dernier plus grand ack + 1)
-			if (next_seq < next_biggest_ack + winSize) && (next_biggest_ack==1 || (next_biggest_ack % (winSize+1)) == 0){
-				fmt.Println("True : nba :", next_biggest_ack)
-				fmt.Println("True: next_seq:", next_seq)
+
+			//on calcule le quotient ENTIER du nba-1 par le winSize 
+        	quotient := (next_biggest_ack - 1) / winSize
+
+			if borneInf == 0 { //1er passage
+
+				//on calcule la borne inférieure de la fenêtre en multipliant le quotient par le winSize et en ajoutant 1
+				borneInf = (quotient * winSize) + 1
+
+			} else { //on n'est pas au 1er passage, donc borneInf initialisé > 0
+				if lost_ack == true {
+					borneInf = next_biggest_ack
+					lost_ack = false
+					borneInfSlide = true
+				} else {
+					//Si la borne Inf n'a pas ete slidée
+					if borneInfSlide == false { 
+						//on calcule la borne inférieure de la fenêtre en multipliant le quotient par le winSize et en ajoutant 1
+						borneInf = (quotient * winSize) + 1
+
+					} else { //la borne a été slidée
+						if borneSup < next_biggest_ack {//le next_biggest_ack devient supérieur à la borne Sup
+							borneInf = borneInf + winSize //on change alors la borne inférieure
+						}
+					}                                    
+				}
+			}
+
+			//on calcule la borne supérieure de la fenêtre en ajoutant winSize-1 à la borne inf
+			borneSup = (borneInf + winSize - 1)
+			fmt.Printf("next_biggest_ack =%d borneInf=%d borneSup=%d\n", next_biggest_ack, borneInf, borneSup)
+
+			//On retourne true si le # de paquet courant est compris dans les bornes de la fenêtre en cours   
+			if (next_seq >= borneInf) && (next_seq <= borneSup){
 				return true
 			} else {
-				fmt.Println("False : nba :", next_biggest_ack)
-				fmt.Println("False: next_seq:", next_seq)
 				return false
 			}
 		}
+
+		/*
+			if lost_ack == true {
+				borneInf = next_biggest_ack - 1
+				lost_ack = false
+			} else {
+				borneInf = (quotient * winSize) + 1
+			}
+
+			//on calcule la borne supérieure de la fenêtre en ajoutant winSize-1 à la borne inf
+			borneSup = (borneInf + winSize - 1)
+			fmt.Printf("next_biggest_ack =%d borneInf=%d borneSup=%d\n", next_biggest_ack, borneInf, borneSup)
+
+			//On retourne true si le # de paquet courant est compris dans les bornes de la fenêtre en cours (par rapport à next_biggest_ack)  
+			if (next_seq >= borneInf) && (next_seq <= borneSup){
+				return true
+			} else {
+			        return false
+			}
+		}*/
 
 		go func() {
 			//tant que le dernier plus grand ack + 1 inf au # du dernier paquet
@@ -141,7 +193,7 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 				} else {
 				//Sinon, si le temps de timeout du dernier + grand ack + 1 est supérieur à 900ms
 					//pour etre sur que le nba n'a pas change entre temps
-					if time.Since(timeouts[next_biggest_ack])> time.Millisecond * 1500 {
+					if time.Since(timeouts[next_biggest_ack])> time.Millisecond * 2000 {
 						//Timeout -> On retransmet le paquet perdu
 						fmt.Println("Timeout, retransmitting packet number", next_biggest_ack)
 						fmt.Println("Timeout: next_seq:", next_seq)
@@ -176,7 +228,8 @@ func sendFile(conn *net.UDPConn, fileName string, addr *net.UDPAddr) {
 				same_ack ++
 				//A partir d'un certain nombre d'ack identiques recus, on renvoie le paquet perdu
 				if same_ack > 0 {
-					next_seq = ack+1
+					next_seq = ack+1 //A TESTER SI MARCHE
+					lost_ack = true
 					//send(ack + 1)
 					same_ack = 0
 				}
